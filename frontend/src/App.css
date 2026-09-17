@@ -1,0 +1,17 @@
+/* App.css - Clean overrides for SENTINEL SOC Dashboard */
+.soc-card {
+  background-color: #0d1322;
+  border: 1px solid #1e293b;
+  border-radius: 0.5rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.soc-card:hover {
+  border-color: #334155;
+}
+
+.soc-card-highlight {
+  background-color: #0d1322;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.05);
+}
