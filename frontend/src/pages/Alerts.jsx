@@ -1,131 +1,403 @@
-// src/pages/Alerts.jsx
-import React, { useState } from 'react';
-import { 
-  AlertTriangle, 
-  Search, 
-  CheckCircle2 
-} from 'lucide-react';
-import { useSoc } from '../context/SocContext';
-import AlertCard from '../components/alerts/AlertCard';
+import React, { useMemo } from "react";
+import {
+  AlertTriangle,
+  Bell,
+  CheckCircle2,
+  Clock3,
+  ShieldAlert,
+  ShieldCheck,
+  XCircle,
+} from "lucide-react";
+import { useSoc } from "../context/SocContext";
+
+const severityConfig = {
+  Critical: {
+    label: "Critical",
+    icon: XCircle,
+    badge: "border-red-200 bg-red-50 text-red-700",
+    iconBox: "border-red-100 bg-red-50 text-red-600",
+    dot: "bg-red-500",
+  },
+  High: {
+    label: "High",
+    icon: ShieldAlert,
+    badge: "border-orange-200 bg-orange-50 text-orange-700",
+    iconBox: "border-orange-100 bg-orange-50 text-orange-600",
+    dot: "bg-orange-500",
+  },
+  Medium: {
+    label: "Medium",
+    icon: AlertTriangle,
+    badge: "border-amber-200 bg-amber-50 text-amber-700",
+    iconBox: "border-amber-100 bg-amber-50 text-amber-600",
+    dot: "bg-amber-500",
+  },
+  Low: {
+    label: "Low",
+    icon: Bell,
+    badge: "border-blue-200 bg-blue-50 text-blue-700",
+    iconBox: "border-blue-100 bg-blue-50 text-blue-600",
+    dot: "bg-blue-500",
+  },
+};
+
+function getSeverityConfig(severity) {
+  return severityConfig[severity] || severityConfig.Medium;
+}
+
+function getAlertTitle(alert) {
+  return (
+    alert.title ||
+    alert.name ||
+    alert.message ||
+    "Security Alert"
+  );
+}
+
+function getAlertDescription(alert) {
+  return (
+    alert.description ||
+    alert.details ||
+    alert.message ||
+    "A security event was detected by SENTINEL."
+  );
+}
+
+function getAlertStatus(alert) {
+  return alert.status || "Active";
+}
+
+function getAlertSeverity(alert) {
+  return (
+    alert.severity ||
+    alert.risk ||
+    alert.level ||
+    "Medium"
+  );
+}
+
+function getAlertTimestamp(alert) {
+  return (
+    alert.timestamp ||
+    alert.time ||
+    alert.created_at ||
+    alert.createdAt ||
+    "Recently detected"
+  );
+}
 
 export default function Alerts() {
-  const { alerts } = useSoc();
+  const { alerts = [] } = useSoc();
 
-  const [severityFilter, setSeverityFilter] = useState('ALL');
-  const [search, setSearch] = useState('');
+  const alertList = Array.isArray(alerts) ? alerts : [];
 
-  // Counts
-  const totalCount = alerts.length;
-  const criticalCount = alerts.filter(a => a.severity === 'CRITICAL' && a.status !== 'Resolved').length;
-  const highCount = alerts.filter(a => a.severity === 'HIGH' && a.status !== 'Resolved').length;
-  const resolvedCount = alerts.filter(a => a.status === 'Resolved').length;
-
-  // Filtered alerts
-  const filteredAlerts = alerts.filter(alert => {
-    const matchesSeverity = severityFilter === 'ALL' || alert.severity === severityFilter;
-    const matchesSearch = 
-      !search ||
-      alert.title.toLowerCase().includes(search.toLowerCase()) ||
-      alert.source.toLowerCase().includes(search.toLowerCase()) ||
-      alert.destination.toLowerCase().includes(search.toLowerCase()) ||
-      alert.attack_category.toLowerCase().includes(search.toLowerCase()) ||
-      alert.id.toLowerCase().includes(search.toLowerCase());
-
-    return matchesSeverity && matchesSearch;
-  });
+  const summary = useMemo(() => {
+    return {
+      total: alertList.length,
+      active: alertList.filter(
+        (alert) => getAlertStatus(alert) === "Active"
+      ).length,
+      critical: alertList.filter(
+        (alert) => getAlertSeverity(alert) === "Critical"
+      ).length,
+      high: alertList.filter(
+        (alert) => getAlertSeverity(alert) === "High"
+      ).length,
+      resolved: alertList.filter(
+        (alert) => getAlertStatus(alert) === "Resolved"
+      ).length,
+    };
+  }, [alertList]);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-800/80">
-        <div>
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl sm:text-2xl font-bold font-mono text-white tracking-wide uppercase flex items-center gap-2.5">
-              <AlertTriangle className="w-6 h-6 text-rose-400" />
-              SECURITY ALERTS
-            </h2>
-            <span className="px-2 py-0.5 rounded text-xs font-mono bg-rose-950/60 text-rose-300 border border-rose-800/60 font-semibold">
-              TRIAGE QUEUE
+    <div className="min-h-full bg-slate-50 px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1600px]">
+        {/* Page Header */}
+        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600">
+                <Bell className="h-4 w-4" />
+              </div>
+
+              <div>
+                <h2 className="text-lg font-semibold tracking-tight text-slate-900">
+                  Security Alerts
+                </h2>
+                <p className="text-[11px] text-slate-500">
+                  Monitor and review detected security events
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            <span className="text-[11px] font-medium text-slate-600">
+              Alert engine operational
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Prioritized security incidents generated from classified network anomalies
-          </p>
-        </div>
-      </div>
-
-      {/* Summary Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
-        <div className="p-3.5 rounded-lg bg-[#0d1322] border border-slate-800">
-          <span className="text-[10px] text-slate-400 uppercase block">Total Alerts</span>
-          <span className="text-xl font-bold text-white mt-1 block">{totalCount}</span>
-          <span className="text-[10px] text-slate-400 block mt-0.5">Ingested Queue</span>
         </div>
 
-        <div className="p-3.5 rounded-lg bg-[#0d1322] border border-slate-800">
-          <span className="text-[10px] text-slate-400 uppercase block">Active Critical</span>
-          <span className="text-xl font-bold text-rose-400 mt-1 block">{criticalCount}</span>
-          <span className="text-[10px] text-rose-400 block mt-0.5 font-bold">P1 Escalation</span>
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Total Alerts
+              </span>
+
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-500">
+                <Bell className="h-4 w-4" />
+              </div>
+            </div>
+
+            <p className="mt-3 text-2xl font-bold tracking-tight text-slate-900">
+              {summary.total}
+            </p>
+
+            <p className="mt-1 text-[10px] text-slate-500">
+              Recorded security events
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Active
+              </span>
+
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600">
+                <ShieldAlert className="h-4 w-4" />
+              </div>
+            </div>
+
+            <p className="mt-3 text-2xl font-bold tracking-tight text-red-600">
+              {summary.active}
+            </p>
+
+            <p className="mt-1 text-[10px] text-slate-500">
+              Require analyst attention
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Critical
+              </span>
+
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600">
+                <XCircle className="h-4 w-4" />
+              </div>
+            </div>
+
+            <p className="mt-3 text-2xl font-bold tracking-tight text-red-600">
+              {summary.critical}
+            </p>
+
+            <p className="mt-1 text-[10px] text-slate-500">
+              Highest severity events
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Resolved
+              </span>
+
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50 text-emerald-600">
+                <ShieldCheck className="h-4 w-4" />
+              </div>
+            </div>
+
+            <p className="mt-3 text-2xl font-bold tracking-tight text-emerald-600">
+              {summary.resolved}
+            </p>
+
+            <p className="mt-1 text-[10px] text-slate-500">
+              Successfully closed alerts
+            </p>
+          </div>
         </div>
 
-        <div className="p-3.5 rounded-lg bg-[#0d1322] border border-slate-800">
-          <span className="text-[10px] text-slate-400 uppercase block">Active High</span>
-          <span className="text-xl font-bold text-orange-400 mt-1 block">{highCount}</span>
-          <span className="text-[10px] text-orange-400 block mt-0.5 font-semibold">P2 Review</span>
-        </div>
+        {/* Alert List */}
+        <section className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">
+                Alert Queue
+              </h3>
 
-        <div className="p-3.5 rounded-lg bg-[#0d1322] border border-slate-800">
-          <span className="text-[10px] text-slate-400 uppercase block">Resolved Incidents</span>
-          <span className="text-xl font-bold text-emerald-400 mt-1 block">{resolvedCount}</span>
-          <span className="text-[10px] text-emerald-400 block mt-0.5">Triaged by SOC</span>
-        </div>
-      </div>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Latest security alerts generated by SENTINEL
+              </p>
+            </div>
 
-      {/* Search & Filter Bar */}
-      <div className="p-4 rounded-lg bg-[#0d1322] border border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 font-mono">
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search alerts by IP, title, category..."
-            className="w-full pl-9 pr-3 py-1.5 rounded-md bg-slate-900 border border-slate-700 text-xs text-white placeholder:text-slate-400 focus:outline-hidden focus:border-cyan-500"
-          />
-        </div>
+            <div className="flex items-center gap-3 text-[10px] text-slate-500">
+              <div className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                <span>{summary.critical} critical</span>
+              </div>
 
-        {/* Severity Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          {['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((sev) => (
-            <button
-              key={sev}
-              onClick={() => setSeverityFilter(sev)}
-              className={`px-3 py-1 rounded text-xs font-semibold uppercase transition-all whitespace-nowrap ${
-                severityFilter === sev
-                  ? 'bg-cyan-950 text-cyan-300 border border-cyan-700'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent'
-              }`}
+              <div className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+                <span>{summary.high} high</span>
+              </div>
+            </div>
+          </div>
+
+          {alertList.length === 0 ? (
+            <div className="flex min-h-[300px] flex-col items-center justify-center px-6 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-emerald-100 bg-emerald-50 text-emerald-600">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+
+              <h4 className="mt-4 text-sm font-semibold text-slate-800">
+                No security alerts
+              </h4>
+
+              <p className="mt-1 max-w-sm text-xs leading-5 text-slate-500">
+                SENTINEL has not generated any active security alerts yet.
+                Detected threats will appear here automatically.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {alertList.map((alert, index) => {
+                const severity = getAlertSeverity(alert);
+                const config = getSeverityConfig(severity);
+                const SeverityIcon = config.icon;
+
+                const status = getAlertStatus(alert);
+                const isActive = status === "Active";
+
+                return (
+                  <div
+                    key={alert.id || alert._id || `alert-${index}`}
+                    className="px-4 py-4 transition-colors hover:bg-slate-50 sm:px-5"
+                  >
+                    <div className="flex gap-3">
+                      <div
+                        className={[
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border",
+                          config.iconBox,
+                        ].join(" ")}
+                      >
+                        <SeverityIcon className="h-4 w-4" />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="text-xs font-semibold text-slate-900 sm:text-sm">
+                                {getAlertTitle(alert)}
+                              </h4>
+
+                              <span
+                                className={[
+                                  "inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
+                                  config.badge,
+                                ].join(" ")}
+                              >
+                                <span
+                                  className={[
+                                    "h-1.5 w-1.5 rounded-full",
+                                    config.dot,
+                                  ].join(" ")}
+                                />
+                                {severity}
+                              </span>
+                            </div>
+
+                            <p className="mt-1.5 max-w-3xl text-[11px] leading-5 text-slate-500">
+                              {getAlertDescription(alert)}
+                            </p>
+                          </div>
+
+                          <span
+                            className={[
+                              "inline-flex w-fit shrink-0 items-center rounded-md border px-2 py-1 text-[9px] font-semibold uppercase tracking-wide",
+                              isActive
+                                ? "border-red-200 bg-red-50 text-red-700"
+                                : "border-emerald-200 bg-emerald-50 text-emerald-700",
+                            ].join(" ")}
+                          >
+                            {status}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] text-slate-400">
+                          <span className="inline-flex items-center gap-1.5">
+                            <Clock3 className="h-3 w-3" />
+                            {getAlertTimestamp(alert)}
+                          </span>
+
+                          {alert.source && (
+                            <span>
+                              Source:{" "}
+                              <span className="font-medium text-slate-500">
+                                {alert.source}
+                              </span>
+                            </span>
+                          )}
+
+                          {alert.type && (
+                            <span>
+                              Type:{" "}
+                              <span className="font-medium text-slate-500">
+                                {alert.type}
+                              </span>
+                            </span>
+                          )}
+
+                          {alert.confidence !== undefined && (
+                            <span>
+                              Confidence:{" "}
+                              <span className="font-medium text-slate-500">
+                                {typeof alert.confidence === "number"
+                                  ? `${Math.round(
+                                      alert.confidence <= 1
+                                        ? alert.confidence * 100
+                                        : alert.confidence
+                                    )}%`
+                                  : alert.confidence}
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Severity Legend */}
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+          <span className="mr-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            Severity
+          </span>
+
+          {Object.values(severityConfig).map((item) => (
+            <div
+              key={item.label}
+              className="flex items-center gap-1.5 text-[10px] text-slate-500"
             >
-              {sev}
-            </button>
+              <span
+                className={[
+                  "h-1.5 w-1.5 rounded-full",
+                  item.dot,
+                ].join(" ")}
+              />
+              <span>{item.label}</span>
+            </div>
           ))}
         </div>
-      </div>
-
-      {/* Alerts List */}
-      <div className="space-y-3">
-        {filteredAlerts.length > 0 ? (
-          filteredAlerts.map(alert => (
-            <AlertCard key={alert.id} alert={alert} />
-          ))
-        ) : (
-          <div className="p-12 text-center rounded-lg bg-[#0d1322] border border-slate-800 font-mono text-slate-400 space-y-2">
-            <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-            <h4 className="text-sm font-bold text-white">NO MATCHING SECURITY ALERTS</h4>
-            <p className="text-xs">All alerts in this filter category have been resolved or do not exist.</p>
-          </div>
-        )}
       </div>
     </div>
   );
