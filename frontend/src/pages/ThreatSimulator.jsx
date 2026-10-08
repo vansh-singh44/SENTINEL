@@ -1,254 +1,231 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import {
-  Activity,
-  AlertTriangle,
-  CheckCircle2,
-  ChevronDown,
-  Clock3,
-  Crosshair,
+  Terminal,
+  Play,
+  Sparkles,
+  RotateCcw,
+  ArrowRight,
+  ShieldCheck,
+  ShieldAlert,
   Loader2,
   Network,
-  Play,
-  RotateCcw,
-  ShieldAlert,
-  Terminal,
-  Zap,
+  Clock3,
+  CheckCircle2,
 } from "lucide-react";
 import { useSoc } from "../context/SocContext";
+import { api } from "../services/api";
+import { SIMULATOR_PRESETS } from "../data/sampleData";
 
-const PRESETS = {
-  normal: {
-    name: "Normal Traffic",
-    description: "Low-risk network activity",
-    source_ip: "192.168.1.25",
-    destination_ip: "10.0.0.15",
-    protocol: "TCP",
-    port: 443,
-    packet_size: 512,
-    flow_duration: 120,
-  },
-  scan: {
-    name: "Port Scan",
-    description: "Suspicious reconnaissance activity",
-    source_ip: "185.220.101.42",
-    destination_ip: "10.0.0.20",
-    protocol: "TCP",
-    port: 22,
-    packet_size: 64,
-    flow_duration: 3,
-  },
-  brute: {
-    name: "Brute Force",
-    description: "Repeated authentication attempts",
-    source_ip: "45.155.205.10",
-    destination_ip: "10.0.0.10",
-    protocol: "TCP",
-    port: 22,
-    packet_size: 128,
-    flow_duration: 18,
-  },
-  dos: {
-    name: "DoS / Flood",
-    description: "High-volume traffic pattern",
-    source_ip: "91.240.118.172",
-    destination_ip: "10.0.0.30",
-    protocol: "UDP",
-    port: 80,
-    packet_size: 1400,
-    flow_duration: 1,
-  },
-};
-
-const INITIAL_FORM = {
-  source_ip: "192.168.1.25",
-  destination_ip: "10.0.0.15",
+const DEFAULT_EVENT = {
+  source_ip: "185.220.101.5",
+  destination_ip: "10.0.2.45",
   protocol: "TCP",
-  port: 443,
-  packet_size: 512,
-  flow_duration: 120,
+  port: 8080,
+  packet_size: 4096,
+  duration: 2.3,
+  service: "http",
+  state: "FIN",
 };
-
-function normalizePrediction(result) {
-  if (!result) {
-    return {
-      status: "Unknown",
-      isAttack: false,
-      confidence: null,
-      raw: null,
-    };
-  }
-
-  const prediction =
-    result.prediction ??
-    result.result ??
-    result.label ??
-    result.class ??
-    result.predicted_class;
-
-  const predictionText = String(prediction ?? "").toLowerCase();
-
-  const isAttack =
-    result.is_attack === true ||
-    result.attack === true ||
-    prediction === 1 ||
-    predictionText === "attack" ||
-    predictionText === "1" ||
-    predictionText.includes("attack");
-
-  const confidence =
-    result.confidence ??
-    result.probability ??
-    result.attack_probability ??
-    result.attack_prob ??
-    null;
-
-  return {
-    status: isAttack ? "Attack Detected" : "Normal Traffic",
-    isAttack,
-    confidence,
-    raw: result,
-  };
-}
 
 function formatConfidence(value) {
-  if (value === null || value === undefined || value === "") {
+  if (value === undefined || value === null || value === "") {
     return "—";
   }
 
   const numeric = Number(value);
 
-  if (!Number.isNaN(numeric)) {
-    const percentage = numeric <= 1 ? numeric * 100 : numeric;
-    return `${Math.round(percentage)}%`;
+  if (Number.isNaN(numeric)) {
+    return String(value);
   }
 
-  return String(value);
+  return `${numeric <= 1 ? Math.round(numeric * 100) : Math.round(numeric)}%`;
+}
+
+function severityClass(severity) {
+  const value = String(severity || "").toUpperCase();
+
+  if (value === "CRITICAL") {
+    return {
+      wrapper: "border-red-200 bg-red-50",
+      icon: "bg-red-100 text-red-600",
+      title: "text-red-700",
+      badge: "border-red-200 bg-red-100 text-red-700",
+    };
+  }
+
+  if (value === "HIGH") {
+    return {
+      wrapper: "border-orange-200 bg-orange-50",
+      icon: "bg-orange-100 text-orange-600",
+      title: "text-orange-700",
+      badge: "border-orange-200 bg-orange-100 text-orange-700",
+    };
+  }
+
+  if (value === "MEDIUM") {
+    return {
+      wrapper: "border-amber-200 bg-amber-50",
+      icon: "bg-amber-100 text-amber-600",
+      title: "text-amber-700",
+      badge: "border-amber-200 bg-amber-100 text-amber-700",
+    };
+  }
+
+  return {
+    wrapper: "border-emerald-200 bg-emerald-50",
+    icon: "bg-emerald-100 text-emerald-600",
+    title: "text-emerald-700",
+    badge: "border-emerald-200 bg-emerald-100 text-emerald-700",
+  };
 }
 
 export default function ThreatSimulator() {
   const {
-    apiHealth = {},
-    predictThreat,
-    simulateThreat,
-    addEvent,
+    addSimulatedThreatToFeed,
+    inspectEvent,
   } = useSoc();
 
-  const [form, setForm] = useState(INITIAL_FORM);
-  const [selectedPreset, setSelectedPreset] = useState("");
-  const [prediction, setPrediction] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [eventData, setEventData] = useState(DEFAULT_EVENT);
+  const [selectedPresetName, setSelectedPresetName] = useState(
+    "Remote Code Execution / Exploit"
+  );
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [predictionResult, setPredictionResult] = useState(null);
   const [error, setError] = useState("");
-  const [requestTime, setRequestTime] = useState(null);
-
-  const endpointStatus = apiHealth.online
-    ? "API Connected"
-    : "Demo Mode";
+  const [lastAnalysisTime, setLastAnalysisTime] = useState(null);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
 
-    setForm((current) => ({
+    let parsedValue = value;
+
+    if (
+      name === "port" ||
+      name === "packet_size" ||
+      name === "duration"
+    ) {
+      parsedValue = value === "" ? "" : Number(value);
+    }
+
+    setEventData((current) => ({
       ...current,
-      [name]:
-        name === "port" ||
-        name === "packet_size" ||
-        name === "flow_duration"
-          ? value === ""
-            ? ""
-            : Number(value)
-          : value,
+      [name]: parsedValue,
     }));
 
-    setPrediction(null);
+    setPredictionResult(null);
     setError("");
   };
 
-  const applyPreset = (presetKey) => {
-    const preset = PRESETS[presetKey];
+  const handleSelectPreset = (preset) => {
+    setSelectedPresetName(preset.name);
 
-    if (!preset) return;
-
-    setSelectedPreset(presetKey);
-
-    setForm({
+    setEventData({
       source_ip: preset.source_ip,
       destination_ip: preset.destination_ip,
       protocol: preset.protocol,
       port: preset.port,
       packet_size: preset.packet_size,
-      flow_duration: preset.flow_duration,
+      duration: preset.duration || 1.8,
+      service: preset.service || "http",
+      state: preset.state || "CON",
     });
 
-    setPrediction(null);
+    setPredictionResult(null);
     setError("");
   };
 
-  const resetForm = () => {
-    setForm(INITIAL_FORM);
-    setSelectedPreset("");
-    setPrediction(null);
+  const handleGenerateSample = async () => {
+    setIsAnalyzing(true);
     setError("");
-    setRequestTime(null);
+
+    try {
+      const sample = await api.getSampleEvent();
+
+      setEventData(sample.event);
+      setSelectedPresetName(
+        sample.online
+          ? "Backend Sample Event"
+          : "Demo Sample Event"
+      );
+      setPredictionResult(null);
+    } catch (err) {
+      console.error(err);
+      setError("Unable to generate a sample network event.");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
-  const submitSimulation = async (event) => {
-    event.preventDefault();
-
-    setLoading(true);
-    setPrediction(null);
+  const handleRunAnalysis = async () => {
+    setIsAnalyzing(true);
+    setPredictionResult(null);
     setError("");
-    setRequestTime(null);
 
     const startedAt = performance.now();
 
     try {
-      let result = null;
+      /*
+       * IMPORTANT:
+       * api.predictThreat() contains the actual Demo Mode fallback.
+       * When the backend is unavailable, it returns an offline
+       * prediction instead of failing.
+       */
+      const result = await api.predictThreat(eventData);
 
-      if (typeof predictThreat === "function") {
-        result = await predictThreat(form);
-      } else if (typeof simulateThreat === "function") {
-        result = await simulateThreat(form);
-      } else {
-        throw new Error(
-          "Threat prediction service is not available in the current application context."
-        );
-      }
+      setPredictionResult(result);
 
-      const normalized = normalizePrediction(result);
-
-      setPrediction(normalized);
-
-      if (typeof addEvent === "function") {
-        addEvent({
-          id: `sim-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          source_ip: form.source_ip,
-          destination_ip: form.destination_ip,
-          protocol: form.protocol,
-          port: form.port,
-          prediction: normalized.isAttack ? "Attack" : "Normal",
-          severity: normalized.isAttack ? "High" : "Low",
-          confidence: normalized.confidence,
-          source: "Threat Simulator",
-          type: "Simulation",
-          status: "Detected",
-        });
-      }
+      setLastAnalysisTime(
+        Math.round(performance.now() - startedAt)
+      );
     } catch (err) {
+      console.error(err);
+
       setError(
         err?.message ||
-          "Unable to process the simulated network event."
+          "Unable to analyze the network event."
       );
     } finally {
-      setRequestTime(Math.round(performance.now() - startedAt));
-      setLoading(false);
+      setIsAnalyzing(false);
     }
   };
 
-  const confidenceText = useMemo(
-    () => formatConfidence(prediction?.confidence),
-    [prediction]
+  const handleClear = () => {
+    setEventData({
+      source_ip: "",
+      destination_ip: "",
+      protocol: "TCP",
+      port: "",
+      packet_size: "",
+      duration: "",
+      service: "http",
+      state: "CON",
+    });
+
+    setPredictionResult(null);
+    setSelectedPresetName("");
+    setError("");
+    setLastAnalysisTime(null);
+  };
+
+  const handlePushAndInspect = () => {
+    if (!predictionResult) return;
+
+    /*
+     * Keep the existing SOC architecture.
+     * This function already exists in SocContext.
+     */
+    addSimulatedThreatToFeed(predictionResult);
+
+    inspectEvent(predictionResult);
+  };
+
+  const styles = severityClass(
+    predictionResult?.severity
   );
+
+  const isAttack =
+    String(predictionResult?.severity || "").toUpperCase() !==
+    "BENIGN";
 
   return (
     <div className="min-h-full bg-slate-50 px-4 py-5 sm:px-6 lg:px-8">
@@ -256,9 +233,9 @@ export default function ThreatSimulator() {
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-cyan-100 bg-cyan-50 text-cyan-700">
-                <Crosshair className="h-4 w-4" />
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-cyan-100 bg-cyan-50 text-cyan-700">
+                <Terminal className="h-5 w-5" />
               </div>
 
               <div>
@@ -266,100 +243,113 @@ export default function ThreatSimulator() {
                   Threat Simulator
                 </h2>
 
-                <p className="text-[11px] text-slate-500">
-                  Submit controlled network events for SENTINEL analysis
+                <p className="mt-0.5 text-[11px] text-slate-500">
+                  Run controlled network events through the SENTINEL detection pipeline
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div
-              className={[
-                "flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-semibold",
-                apiHealth.online
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : "border-amber-200 bg-amber-50 text-amber-700",
-              ].join(" ")}
-            >
-              <span
-                className={[
-                  "h-1.5 w-1.5 rounded-full",
-                  apiHealth.online
-                    ? "bg-emerald-500"
-                    : "bg-amber-500",
-                ].join(" ")}
-              />
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
 
-              {endpointStatus}
-            </div>
+            <span className="text-[10px] font-semibold text-slate-600">
+              Demo fallback enabled
+            </span>
           </div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.75fr)]">
-          {/* Configuration */}
+        {/* Presets */}
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-cyan-700" />
+
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">
+                Threat Scenarios
+              </h3>
+
+              <p className="mt-0.5 text-[10px] text-slate-500">
+                Select a predefined UNSW-NB15-inspired network scenario
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            {SIMULATOR_PRESETS.map((preset) => {
+              const selected =
+                selectedPresetName === preset.name;
+
+              return (
+                <button
+                  key={preset.name}
+                  type="button"
+                  onClick={() => handleSelectPreset(preset)}
+                  className={[
+                    "rounded-lg border p-3 text-left transition-all",
+                    selected
+                      ? "border-cyan-300 bg-cyan-50"
+                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50",
+                  ].join(" ")}
+                >
+                  <p
+                    className={[
+                      "truncate text-[11px] font-semibold",
+                      selected
+                        ? "text-cyan-800"
+                        : "text-slate-800",
+                    ].join(" ")}
+                  >
+                    {preset.name}
+                  </p>
+
+                  <p className="mt-1 truncate text-[9px] text-slate-500">
+                    {preset.expected_category || "Network event"}
+                  </p>
+
+                  <p className="mt-1 text-[9px] text-slate-400">
+                    Port {preset.port}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Main */}
+        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(350px,0.8fr)]">
+          {/* Event Configuration */}
           <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-5 py-4">
-              <div className="flex items-center gap-2">
-                <Network className="h-4 w-4 text-cyan-700" />
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <Network className="h-4 w-4 text-cyan-700" />
 
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-900">
-                    Network Event
-                  </h3>
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      Network Event
+                    </h3>
 
-                  <p className="mt-0.5 text-[10px] text-slate-500">
-                    Configure the event that will be sent to the detection pipeline
-                  </p>
+                    <p className="mt-0.5 text-[10px] text-slate-500">
+                      Configure the event before running inference
+                    </p>
+                  </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleGenerateSample}
+                  disabled={isAnalyzing}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-3 text-[10px] font-semibold text-cyan-700 transition-colors hover:bg-cyan-100 disabled:opacity-50"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  Generate Sample
+                </button>
               </div>
             </div>
 
-            <form onSubmit={submitSimulation} className="p-5">
-              {/* Presets */}
-              <div>
-                <label className="mb-2 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                  Quick Presets
-                </label>
-
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  {Object.entries(PRESETS).map(([key, preset]) => {
-                    const active = selectedPreset === key;
-
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => applyPreset(key)}
-                        className={[
-                          "rounded-lg border p-3 text-left transition-all",
-                          active
-                            ? "border-cyan-300 bg-cyan-50"
-                            : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50",
-                        ].join(" ")}
-                      >
-                        <p
-                          className={[
-                            "text-[11px] font-semibold",
-                            active
-                              ? "text-cyan-800"
-                              : "text-slate-800",
-                          ].join(" ")}
-                        >
-                          {preset.name}
-                        </p>
-
-                        <p className="mt-1 text-[9px] leading-4 text-slate-500">
-                          {preset.description}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Form */}
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="p-5">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label
                     htmlFor="source_ip"
@@ -371,11 +361,10 @@ export default function ThreatSimulator() {
                   <input
                     id="source_ip"
                     name="source_ip"
-                    value={form.source_ip}
+                    value={eventData.source_ip}
                     onChange={handleChange}
-                    placeholder="192.168.1.10"
-                    required
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-xs text-slate-800 outline-none transition-colors placeholder:text-slate-300 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                    placeholder="185.220.101.5"
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-xs text-slate-800 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
                   />
                 </div>
 
@@ -390,11 +379,10 @@ export default function ThreatSimulator() {
                   <input
                     id="destination_ip"
                     name="destination_ip"
-                    value={form.destination_ip}
+                    value={eventData.destination_ip}
                     onChange={handleChange}
-                    placeholder="10.0.0.10"
-                    required
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-xs text-slate-800 outline-none transition-colors placeholder:text-slate-300 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                    placeholder="10.0.2.45"
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-xs text-slate-800 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
                   />
                 </div>
 
@@ -406,21 +394,17 @@ export default function ThreatSimulator() {
                     Protocol
                   </label>
 
-                  <div className="relative">
-                    <select
-                      id="protocol"
-                      name="protocol"
-                      value={form.protocol}
-                      onChange={handleChange}
-                      className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 pr-9 text-xs font-medium text-slate-800 outline-none transition-colors focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
-                    >
-                      <option value="TCP">TCP</option>
-                      <option value="UDP">UDP</option>
-                      <option value="ICMP">ICMP</option>
-                    </select>
-
-                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                  </div>
+                  <select
+                    id="protocol"
+                    name="protocol"
+                    value={eventData.protocol}
+                    onChange={handleChange}
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                  >
+                    <option value="TCP">TCP</option>
+                    <option value="UDP">UDP</option>
+                    <option value="ICMP">ICMP</option>
+                  </select>
                 </div>
 
                 <div>
@@ -428,7 +412,7 @@ export default function ThreatSimulator() {
                     htmlFor="port"
                     className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500"
                   >
-                    Destination Port
+                    Port
                   </label>
 
                   <input
@@ -437,10 +421,9 @@ export default function ThreatSimulator() {
                     type="number"
                     min="0"
                     max="65535"
-                    value={form.port}
+                    value={eventData.port}
                     onChange={handleChange}
-                    required
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-xs text-slate-800 outline-none transition-colors focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-xs text-slate-800 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
                   />
                 </div>
 
@@ -458,13 +441,12 @@ export default function ThreatSimulator() {
                       name="packet_size"
                       type="number"
                       min="1"
-                      value={form.packet_size}
+                      value={eventData.packet_size}
                       onChange={handleChange}
-                      required
-                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 pr-14 font-mono text-xs text-slate-800 outline-none transition-colors focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 pr-14 font-mono text-xs text-slate-800 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
                     />
 
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-slate-400">
                       bytes
                     </span>
                   </div>
@@ -472,86 +454,121 @@ export default function ThreatSimulator() {
 
                 <div>
                   <label
-                    htmlFor="flow_duration"
+                    htmlFor="duration"
                     className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500"
                   >
-                    Flow Duration
+                    Duration
                   </label>
 
                   <div className="relative">
                     <input
-                      id="flow_duration"
-                      name="flow_duration"
+                      id="duration"
+                      name="duration"
                       type="number"
                       min="0"
-                      value={form.flow_duration}
+                      step="0.1"
+                      value={eventData.duration}
                       onChange={handleChange}
-                      required
-                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 pr-12 font-mono text-xs text-slate-800 outline-none transition-colors focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 pr-12 font-mono text-xs text-slate-800 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
                     />
 
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-slate-400">
                       sec
                     </span>
                   </div>
                 </div>
+
+                <div>
+                  <label
+                    htmlFor="service"
+                    className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500"
+                  >
+                    Service
+                  </label>
+
+                  <input
+                    id="service"
+                    name="service"
+                    value={eventData.service}
+                    onChange={handleChange}
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-xs text-slate-800 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="state"
+                    className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500"
+                  >
+                    Connection State
+                  </label>
+
+                  <input
+                    id="state"
+                    name="state"
+                    value={eventData.state}
+                    onChange={handleChange}
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 font-mono text-xs text-slate-800 outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                  />
+                </div>
               </div>
 
-              {/* Error */}
               {error && (
-                <div className="mt-5 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                  <div className="flex items-start gap-2">
+                    <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
 
-                  <div>
-                    <p className="text-xs font-semibold text-red-800">
-                      Simulation failed
-                    </p>
+                    <div>
+                      <p className="text-xs font-semibold text-red-800">
+                        Analysis failed
+                      </p>
 
-                    <p className="mt-1 text-[11px] leading-5 text-red-700">
-                      {error}
-                    </p>
+                      <p className="mt-1 text-[10px] leading-4 text-red-700">
+                        {error}
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* Actions */}
               <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  onClick={resetForm}
-                  disabled={loading}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                  onClick={handleClear}
+                  disabled={isAnalyzing}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
-                  Reset
+                  Clear
                 </button>
 
                 <button
-                  type="submit"
-                  disabled={loading}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-cyan-700 px-5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  type="button"
+                  onClick={handleRunAnalysis}
+                  disabled={isAnalyzing}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-cyan-700 px-5 text-xs font-semibold text-white shadow-sm hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {loading ? (
+                  {isAnalyzing ? (
                     <>
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Analyzing Event...
+                      Analyzing...
                     </>
                   ) : (
                     <>
                       <Play className="h-3.5 w-3.5" />
-                      Analyze Threat
+                      Run AI Analysis
                     </>
                   )}
                 </button>
               </div>
-            </form>
+            </div>
           </section>
 
-          {/* Result Panel */}
+          {/* Result */}
           <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-5 py-4">
               <div className="flex items-center gap-2">
-                <Activity className="h-4 w-4 text-cyan-700" />
+                <ShieldCheck className="h-4 w-4 text-cyan-700" />
 
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900">
@@ -559,17 +576,17 @@ export default function ThreatSimulator() {
                   </h3>
 
                   <p className="mt-0.5 text-[10px] text-slate-500">
-                    SENTINEL inference output
+                    Model inference and SOC enrichment
                   </p>
                 </div>
               </div>
             </div>
 
             <div className="p-5">
-              {!prediction && !loading && (
-                <div className="flex min-h-[360px] flex-col items-center justify-center text-center">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full border border-cyan-100 bg-cyan-50 text-cyan-700">
-                    <Zap className="h-6 w-6" />
+              {!predictionResult && !isAnalyzing && (
+                <div className="flex min-h-[420px] flex-col items-center justify-center text-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-400">
+                    <Terminal className="h-6 w-6" />
                   </div>
 
                   <h4 className="mt-4 text-sm font-semibold text-slate-800">
@@ -577,36 +594,35 @@ export default function ThreatSimulator() {
                   </h4>
 
                   <p className="mt-1 max-w-xs text-[11px] leading-5 text-slate-500">
-                    Configure a network event or choose a preset, then run the
-                    analysis to see the model response.
+                    Configure a network event and run the analysis.
+                    If the backend is unavailable, SENTINEL automatically
+                    uses its Demo Mode fallback.
                   </p>
                 </div>
               )}
 
-              {loading && (
-                <div className="flex min-h-[360px] flex-col items-center justify-center text-center">
+              {isAnalyzing && (
+                <div className="flex min-h-[420px] flex-col items-center justify-center text-center">
                   <div className="flex h-14 w-14 items-center justify-center rounded-full border border-cyan-100 bg-cyan-50 text-cyan-700">
                     <Loader2 className="h-6 w-6 animate-spin" />
                   </div>
 
                   <h4 className="mt-4 text-sm font-semibold text-slate-800">
-                    Analyzing network event
+                    Running detection
                   </h4>
 
                   <p className="mt-1 text-[11px] text-slate-500">
-                    Sending event through the SENTINEL detection pipeline...
+                    Processing the network event...
                   </p>
                 </div>
               )}
 
-              {prediction && !loading && (
+              {predictionResult && !isAnalyzing && (
                 <div>
                   <div
                     className={[
                       "rounded-xl border p-5",
-                      prediction.isAttack
-                        ? "border-red-200 bg-red-50"
-                        : "border-emerald-200 bg-emerald-50",
+                      styles.wrapper,
                     ].join(" ")}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -614,12 +630,10 @@ export default function ThreatSimulator() {
                         <div
                           className={[
                             "flex h-11 w-11 items-center justify-center rounded-full",
-                            prediction.isAttack
-                              ? "bg-red-100 text-red-600"
-                              : "bg-emerald-100 text-emerald-600",
+                            styles.icon,
                           ].join(" ")}
                         >
-                          {prediction.isAttack ? (
+                          {isAttack ? (
                             <ShieldAlert className="h-5 w-5" />
                           ) : (
                             <CheckCircle2 className="h-5 w-5" />
@@ -627,131 +641,181 @@ export default function ThreatSimulator() {
                         </div>
 
                         <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                            Classification
+                          <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500">
+                            Prediction
                           </p>
 
                           <h4
                             className={[
-                              "mt-1 text-lg font-bold tracking-tight",
-                              prediction.isAttack
-                                ? "text-red-700"
-                                : "text-emerald-700",
+                              "mt-1 text-lg font-bold",
+                              styles.title,
                             ].join(" ")}
                           >
-                            {prediction.status}
+                            {predictionResult.prediction ||
+                              "Normal"}
                           </h4>
                         </div>
                       </div>
 
-                      <div className="text-right">
-                        <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+                      <span
+                        className={[
+                          "rounded-md border px-2 py-1 text-[9px] font-bold uppercase",
+                          styles.badge,
+                        ].join(" ")}
+                      >
+                        {predictionResult.severity ||
+                          "BENIGN"}
+                      </span>
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-[9px] uppercase tracking-wide text-slate-400">
                           Confidence
                         </p>
 
-                        <p
-                          className={[
-                            "mt-1 text-xl font-bold",
-                            prediction.isAttack
-                              ? "text-red-700"
-                              : "text-emerald-700",
-                          ].join(" ")}
-                        >
-                          {confidenceText}
+                        <p className="mt-1 text-sm font-bold text-slate-800">
+                          {formatConfidence(
+                            predictionResult.confidence
+                          )}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[9px] uppercase tracking-wide text-slate-400">
+                          Risk Score
+                        </p>
+
+                        <p className="mt-1 text-sm font-bold text-slate-800">
+                          {predictionResult.risk_score ?? "—"}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[9px] uppercase tracking-wide text-slate-400">
+                          Priority
+                        </p>
+
+                        <p className="mt-1 text-sm font-bold text-slate-800">
+                          {predictionResult.priority || "P4"}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[9px] uppercase tracking-wide text-slate-400">
+                          Source
+                        </p>
+
+                        <p className="mt-1 text-[10px] font-semibold text-slate-700">
+                          {predictionResult.online
+                            ? "Live Backend"
+                            : "Demo Mode"}
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-5">
-                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                      Event Summary
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+                      Recommendation
                     </p>
 
-                    <div className="overflow-hidden rounded-lg border border-slate-200">
-                      <div className="grid grid-cols-2 divide-x divide-y divide-slate-200">
-                        <div className="p-3">
-                          <p className="text-[9px] uppercase tracking-wide text-slate-400">
-                            Source
-                          </p>
-                          <p className="mt-1 truncate font-mono text-[11px] font-medium text-slate-700">
-                            {form.source_ip}
-                          </p>
-                        </div>
+                    <p className="mt-2 text-[11px] leading-5 text-slate-600">
+                      {predictionResult.recommendation ||
+                        "Continue monitoring the event."}
+                    </p>
+                  </div>
 
-                        <div className="p-3">
-                          <p className="text-[9px] uppercase tracking-wide text-slate-400">
-                            Destination
-                          </p>
-                          <p className="mt-1 truncate font-mono text-[11px] font-medium text-slate-700">
-                            {form.destination_ip}
-                          </p>
-                        </div>
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-white">
+                    <div className="grid grid-cols-2 divide-x divide-y divide-slate-200">
+                      <div className="p-3">
+                        <p className="text-[9px] uppercase tracking-wide text-slate-400">
+                          Source
+                        </p>
 
-                        <div className="p-3">
-                          <p className="text-[9px] uppercase tracking-wide text-slate-400">
-                            Protocol
-                          </p>
-                          <p className="mt-1 text-[11px] font-semibold text-slate-700">
-                            {form.protocol}
-                          </p>
-                        </div>
+                        <p className="mt-1 truncate font-mono text-[10px] font-semibold text-slate-700">
+                          {predictionResult.source_ip ||
+                            eventData.source_ip ||
+                            "—"}
+                        </p>
+                      </div>
 
-                        <div className="p-3">
-                          <p className="text-[9px] uppercase tracking-wide text-slate-400">
-                            Port
-                          </p>
-                          <p className="mt-1 font-mono text-[11px] font-semibold text-slate-700">
-                            {form.port}
-                          </p>
-                        </div>
+                      <div className="p-3">
+                        <p className="text-[9px] uppercase tracking-wide text-slate-400">
+                          Destination
+                        </p>
 
-                        <div className="p-3">
-                          <p className="text-[9px] uppercase tracking-wide text-slate-400">
-                            Packet Size
-                          </p>
-                          <p className="mt-1 font-mono text-[11px] font-semibold text-slate-700">
-                            {form.packet_size} bytes
-                          </p>
-                        </div>
+                        <p className="mt-1 truncate font-mono text-[10px] font-semibold text-slate-700">
+                          {predictionResult.destination_ip ||
+                            eventData.destination_ip ||
+                            "—"}
+                        </p>
+                      </div>
 
-                        <div className="p-3">
-                          <p className="text-[9px] uppercase tracking-wide text-slate-400">
-                            Duration
-                          </p>
-                          <p className="mt-1 font-mono text-[11px] font-semibold text-slate-700">
-                            {form.flow_duration} sec
-                          </p>
-                        </div>
+                      <div className="p-3">
+                        <p className="text-[9px] uppercase tracking-wide text-slate-400">
+                          Protocol
+                        </p>
+
+                        <p className="mt-1 text-[10px] font-semibold text-slate-700">
+                          {predictionResult.protocol ||
+                            eventData.protocol}
+                        </p>
+                      </div>
+
+                      <div className="p-3">
+                        <p className="text-[9px] uppercase tracking-wide text-slate-400">
+                          Port
+                        </p>
+
+                        <p className="mt-1 font-mono text-[10px] font-semibold text-slate-700">
+                          {predictionResult.port ||
+                            eventData.port ||
+                            "—"}
+                        </p>
                       </div>
                     </div>
                   </div>
 
-                  {requestTime !== null && (
+                  {lastAnalysisTime !== null && (
                     <div className="mt-4 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
                       <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                        <Clock3 className="h-3.5 w-3.5" />
+                        <Clock3 className="h-3 w-3" />
                         Processing time
                       </div>
 
                       <span className="font-mono text-[10px] font-semibold text-slate-700">
-                        {requestTime} ms
+                        {lastAnalysisTime} ms
                       </span>
                     </div>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={handlePushAndInspect}
+                    className="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-xs font-semibold text-white transition-colors hover:bg-slate-800"
+                  >
+                    Push to Live Feed
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               )}
             </div>
           </section>
         </div>
 
-        {/* Disclaimer */}
-        <div className="mt-4 flex items-start gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-[10px] leading-4 text-slate-500">
-          <Terminal className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-          <p>
-            The Threat Simulator generates controlled test events for
-            demonstration and evaluation. It does not represent real-time
-            network packet capture or live intrusion monitoring.
+        {/* Explanation */}
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+
+          <p className="text-[10px] leading-4 text-slate-500">
+            <span className="font-semibold text-slate-700">
+              Demo Mode:
+            </span>{" "}
+            when the SENTINEL backend cannot be reached, the existing
+            API service automatically performs an offline fallback
+            classification. This allows the simulator to remain usable
+            without the backend being online.
           </p>
         </div>
       </div>
