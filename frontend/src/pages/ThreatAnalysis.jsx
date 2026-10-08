@@ -1,326 +1,553 @@
-// src/pages/ThreatAnalysis.jsx
-import React from 'react';
-import { 
-  Crosshair, 
-  Cpu, 
-  Server, 
-  ArrowLeft, 
-  CheckCircle2, 
-  Info,
-  Layers,
-  FileText
-} from 'lucide-react';
-import { useSoc } from '../context/SocContext';
-import SeverityBadge from '../components/common/SeverityBadge';
+import React from "react";
+import {
+  Crosshair,
+  ShieldAlert,
+  ShieldCheck,
+  Activity,
+  Target,
+  AlertTriangle,
+} from "lucide-react";
+import { useSoc } from "../context/SocContext";
+import ChartCard from "../components/common/ChartCard";
 
 export default function ThreatAnalysis() {
-  const { selectedThreat, setActivePage } = useSoc();
+  const {
+    events = [],
+    threatEvents = [],
+    stats = {},
+  } = useSoc();
 
-  if (!selectedThreat) {
-    return (
-      <div className="p-12 text-center font-mono text-slate-400 space-y-4">
-        <Crosshair className="w-12 h-12 mx-auto text-slate-400" />
-        <h3 className="text-base text-white font-bold">NO EVENT SELECTED FOR ANALYSIS</h3>
-        <p className="text-xs max-w-md mx-auto">
-          Please choose a network session from the Live Threat Feed or Alerts page to inspect its telemetry vector.
-        </p>
-        <button
-          onClick={() => setActivePage('live-feed')}
-          className="px-4 py-2 rounded bg-cyan-600 hover:bg-cyan-500 text-black text-xs font-bold font-mono uppercase"
-        >
-          Go to Live Feed
-        </button>
-      </div>
-    );
-  }
+  const sourceEvents =
+    threatEvents.length > 0 ? threatEvents : events;
 
-  const features = selectedThreat.features || {
-    dur: 1.45,
-    sbytes: selectedThreat.packet_size || 512,
-    dbytes: 280,
-    spkts: 14,
-    dpkts: 8,
-    service: selectedThreat.protocol.toLowerCase(),
-    state: 'CON',
-    rate: 1450.2,
-    sttl: 64,
-    dttl: 64
+  const totalEvents =
+    stats.totalEvents ??
+    stats.total_events ??
+    sourceEvents.length ??
+    0;
+
+  const detectedThreats =
+    stats.threatsDetected ??
+    stats.threats_detected ??
+    sourceEvents.filter((event) => {
+      const prediction =
+        event.prediction ??
+        event.is_attack ??
+        event.attack;
+
+      return (
+        prediction === 1 ||
+        prediction === "1" ||
+        prediction === true ||
+        String(event.severity || "").toLowerCase() !==
+          "benign"
+      );
+    }).length;
+
+  const attackRate =
+    totalEvents > 0
+      ? ((detectedThreats / totalEvents) * 100).toFixed(1)
+      : "0.0";
+
+  const severityCounts = {
+    Critical: 0,
+    High: 0,
+    Medium: 0,
+    Low: 0,
+    Benign: 0,
   };
 
-  const isCritical = selectedThreat.severity === 'CRITICAL';
-  const isHigh = selectedThreat.severity === 'HIGH';
+  sourceEvents.forEach((event) => {
+    const severity = String(
+      event.severity ||
+        event.threat_level ||
+        event.level ||
+        (event.prediction === 1 ||
+        event.prediction === "1"
+          ? "High"
+          : "Benign")
+    ).toLowerCase();
+
+    if (severity.includes("critical")) {
+      severityCounts.Critical += 1;
+    } else if (severity.includes("high")) {
+      severityCounts.High += 1;
+    } else if (severity.includes("medium")) {
+      severityCounts.Medium += 1;
+    } else if (severity.includes("low")) {
+      severityCounts.Low += 1;
+    } else {
+      severityCounts.Benign += 1;
+    }
+  });
+
+  const severityColors = {
+    Critical: {
+      bar: "bg-red-600",
+      text: "text-red-700",
+      bg: "bg-red-50",
+      border: "border-red-200",
+    },
+    High: {
+      bar: "bg-orange-500",
+      text: "text-orange-700",
+      bg: "bg-orange-50",
+      border: "border-orange-200",
+    },
+    Medium: {
+      bar: "bg-amber-500",
+      text: "text-amber-700",
+      bg: "bg-amber-50",
+      border: "border-amber-200",
+    },
+    Low: {
+      bar: "bg-blue-500",
+      text: "text-blue-700",
+      bg: "bg-blue-50",
+      border: "border-blue-200",
+    },
+    Benign: {
+      bar: "bg-emerald-500",
+      text: "text-emerald-700",
+      bg: "bg-emerald-50",
+      border: "border-emerald-200",
+    },
+  };
+
+  const getProtocol = (event) =>
+    event.protocol ||
+    event.proto ||
+    "Unknown";
+
+  const getSource = (event) =>
+    event.source_ip ||
+    event.src_ip ||
+    event.source ||
+    "Unknown";
+
+  const getDestination = (event) =>
+    event.destination_ip ||
+    event.dest_ip ||
+    event.destination ||
+    "Unknown";
+
+  const getPrediction = (event) => {
+    const prediction =
+      event.prediction ??
+      event.is_attack ??
+      event.attack;
+
+    if (
+      prediction === 1 ||
+      prediction === "1" ||
+      prediction === true
+    ) {
+      return "Attack";
+    }
+
+    return (
+      event.prediction_label ||
+      "Normal"
+    );
+  };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
-      {/* Top Breadcrumb / Back button */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-800/80">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setActivePage('live-feed')}
-            className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-            title="Back to Live Feed"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl sm:text-2xl font-bold font-mono text-white tracking-wide uppercase flex items-center gap-2">
-                <Crosshair className="w-5 h-5 text-cyan-400" />
-                THREAT INVESTIGATION & ANALYSIS
-              </h2>
-              <span className="font-mono text-xs text-slate-400 px-2 py-0.5 rounded bg-slate-900 border border-slate-800">
-                ID: {selectedThreat.id}
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Deep forensic triage of flow session classified by SENTINEL ML Engine
-            </p>
+    <div className="space-y-5">
+      {/* Header */}
+      <div>
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-cyan-100 bg-cyan-50">
+            <Crosshair className="h-4 w-4 text-cyan-700" />
           </div>
+
+          <span className="text-xs font-semibold uppercase tracking-wider text-cyan-700">
+            Detection Analysis
+          </span>
         </div>
 
-        <SeverityBadge severity={selectedThreat.severity} size="md" />
+        <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">
+          Threat Analysis
+        </h2>
+
+        <p className="mt-1 max-w-2xl text-sm text-slate-500">
+          Examine classification results, severity levels and
+          network indicators identified by the SENTINEL detection
+          pipeline.
+        </p>
       </div>
 
-      {/* Primary Triage Card Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 font-mono">
-        {/* Prediction */}
-        <div className="p-4 rounded-lg bg-[#0d1322] border border-slate-800">
-          <span className="text-[10px] text-slate-400 uppercase tracking-wider block mb-1">
-            AI Classification
-          </span>
-          <div className="text-xl font-bold text-white flex items-center gap-2">
-            <span className={isCritical ? 'text-rose-400' : isHigh ? 'text-orange-400' : 'text-cyan-400'}>
-              {selectedThreat.prediction || selectedThreat.attack_category}
-            </span>
-          </div>
-          <span className="text-[11px] text-slate-400 block mt-1">
-            UNSW-NB15 Class
-          </span>
-        </div>
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Events Analyzed
+              </p>
 
-        {/* Confidence */}
-        <div className="p-4 rounded-lg bg-[#0d1322] border border-slate-800">
-          <span className="text-[10px] text-slate-400 uppercase tracking-wider block mb-1">
-            Prediction Confidence
-          </span>
-          <div className="text-xl font-bold text-cyan-400">
-            {selectedThreat.confidence || 94.2}%
-          </div>
-          <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden mt-2 border border-slate-800">
-            <div 
-              className="h-full bg-cyan-400 rounded-full" 
-              style={{ width: `${selectedThreat.confidence || 94.2}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Risk Score */}
-        <div className="p-4 rounded-lg bg-[#0d1322] border border-slate-800">
-          <span className="text-[10px] text-slate-400 uppercase tracking-wider block mb-1">
-            Risk Score
-          </span>
-          <div className={`text-xl font-bold ${
-            selectedThreat.risk_score >= 80 ? 'text-rose-400' : selectedThreat.risk_score >= 50 ? 'text-amber-400' : 'text-emerald-400'
-          }`}>
-            {selectedThreat.risk_score || 85} / 100
-          </div>
-          <span className="text-[11px] text-slate-400 block mt-1">
-            Severity Weight Matrix
-          </span>
-        </div>
-
-        {/* Priority */}
-        <div className="p-4 rounded-lg bg-[#0d1322] border border-slate-800">
-          <span className="text-[10px] text-slate-400 uppercase tracking-wider block mb-1">
-            Triage Priority
-          </span>
-          <div className="text-xl font-bold text-white flex items-center gap-2">
-            <span className={`px-2 py-0.5 rounded text-sm font-bold ${
-              selectedThreat.priority === 'P1' ? 'bg-rose-950 text-rose-300 border border-rose-700' : 'bg-slate-800 text-slate-200'
-            }`}>
-              {selectedThreat.priority || 'P1'}
-            </span>
-            <span className="text-xs text-slate-400 font-normal">
-              {selectedThreat.priority === 'P1' ? 'Immediate Triage' : 'Standard Queue'}
-            </span>
-          </div>
-          <span className="text-[11px] text-slate-400 block mt-1">
-            SOC Workflow SLA: {selectedThreat.priority === 'P1' ? '< 15 mins' : '< 4 hours'}
-          </span>
-        </div>
-      </div>
-
-      {/* Two Column Layout: Network Session Details + Model Detection Context */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: Network Session Context */}
-        <div className="bg-[#0d1322] border border-slate-800 rounded-lg p-5 space-y-4 font-mono">
-          <h3 className="text-xs uppercase tracking-wider text-slate-300 font-bold flex items-center gap-2 pb-2 border-b border-slate-800">
-            <Server className="w-4 h-4 text-cyan-400" />
-            Network Flow Identifiers
-          </h3>
-
-          <div className="grid grid-cols-2 gap-4 text-xs">
-            <div className="p-3 rounded bg-[#090d16] border border-slate-800/80">
-              <span className="text-[10px] text-slate-400 uppercase block mb-0.5">Source IP</span>
-              <span className="text-cyan-300 font-bold text-sm select-all">
-                {selectedThreat.source_ip}
-              </span>
-              <span className="text-[10px] text-slate-400 block mt-1">Origin Endpoint</span>
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {Number(totalEvents).toLocaleString()}
+              </p>
             </div>
 
-            <div className="p-3 rounded bg-[#090d16] border border-slate-800/80">
-              <span className="text-[10px] text-slate-400 uppercase block mb-0.5">Destination IP</span>
-              <span className="text-white font-bold text-sm select-all">
-                {selectedThreat.destination_ip}
-              </span>
-              <span className="text-[10px] text-slate-400 block mt-1">Internal Target Host</span>
-            </div>
-
-            <div className="p-3 rounded bg-[#090d16] border border-slate-800/80">
-              <span className="text-[10px] text-slate-400 uppercase block mb-0.5">Protocol & Port</span>
-              <span className="text-slate-200 font-bold text-sm">
-                {selectedThreat.protocol} / Port {selectedThreat.port || 80}
-              </span>
-              <span className="text-[10px] text-slate-400 block mt-1">
-                Transport Layer
-              </span>
-            </div>
-
-            <div className="p-3 rounded bg-[#090d16] border border-slate-800/80">
-              <span className="text-[10px] text-slate-400 uppercase block mb-0.5">Timestamp</span>
-              <span className="text-slate-200 font-bold text-sm">
-                {selectedThreat.timestamp}
-              </span>
-              <span className="text-[10px] text-slate-400 block mt-1">Ingestion Time</span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-cyan-100 bg-cyan-50">
+              <Activity className="h-4 w-4 text-cyan-700" />
             </div>
           </div>
         </div>
 
-        {/* Right: Detection Model Information */}
-        <div className="bg-[#0d1322] border border-slate-800 rounded-lg p-5 space-y-4 font-mono">
-          <h3 className="text-xs uppercase tracking-wider text-slate-300 font-bold flex items-center gap-2 pb-2 border-b border-slate-800">
-            <Cpu className="w-4 h-4 text-emerald-400" />
-            Detection Model & Dataset Information
-          </h3>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Threats Detected
+              </p>
 
-          <div className="space-y-3 text-xs">
-            <div className="flex items-center justify-between p-2 rounded bg-[#090d16] border border-slate-800/80">
-              <span className="text-slate-400">Classifying Model:</span>
-              <span className="text-white font-bold">Random Forest Classifier</span>
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {Number(detectedThreats).toLocaleString()}
+              </p>
             </div>
-            <div className="flex items-center justify-between p-2 rounded bg-[#090d16] border border-slate-800/80">
-              <span className="text-slate-400">Benchmark Training Dataset:</span>
-              <span className="text-cyan-400 font-bold">UNSW-NB15 Cyber Benchmark</span>
+
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-red-50">
+              <ShieldAlert className="h-4 w-4 text-red-600" />
             </div>
-            <div className="flex items-center justify-between p-2 rounded bg-[#090d16] border border-slate-800/80">
-              <span className="text-slate-400">Ensemble Tree Consensus:</span>
-              <span className="text-emerald-400 font-bold">{selectedThreat.confidence || 94.2}% Agreement (150 trees)</span>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Detection Rate
+              </p>
+
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {attackRate}%
+              </p>
             </div>
-            <div className="flex items-center justify-between p-2 rounded bg-[#090d16] border border-slate-800/80">
-              <span className="text-slate-400">Trained Model Artifact:</span>
-              <span className="text-slate-300 font-mono text-[11px]">sentinel_model.joblib</span>
+
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-orange-100 bg-orange-50">
+              <Target className="h-4 w-4 text-orange-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Benign Events
+              </p>
+
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {severityCounts.Benign.toLocaleString()}
+              </p>
+            </div>
+
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-emerald-50">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Network Features Extracted (UNSW-NB15 Vector) */}
-      <div className="bg-[#0d1322] border border-slate-800 rounded-lg p-5 space-y-3 font-mono">
-        <h3 className="text-xs uppercase tracking-wider text-slate-300 font-bold flex items-center gap-2 pb-2 border-b border-slate-800">
-          <Layers className="w-4 h-4 text-cyan-400" />
-          UNSW-NB15 Flow Feature Vector (Inference Input)
-        </h3>
+      {/* Analysis content */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <ChartCard
+          title="Severity Analysis"
+          subtitle="Distribution of detected event severity"
+        >
+          <div className="space-y-4">
+            {Object.entries(severityCounts).map(
+              ([severity, count]) => {
+                const styles =
+                  severityColors[severity];
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 text-xs">
-          <div className="p-2.5 rounded bg-[#090d16] border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase block">dur (Duration)</span>
-            <span className="text-white font-bold">{features.dur} sec</span>
+                const percentage =
+                  sourceEvents.length > 0
+                    ? (count / sourceEvents.length) * 100
+                    : 0;
+
+                return (
+                  <div key={severity}>
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={[
+                            "h-2 w-2 rounded-full",
+                            styles.bar,
+                          ].join(" ")}
+                        />
+
+                        <span
+                          className={[
+                            "text-xs font-semibold",
+                            styles.text,
+                          ].join(" ")}
+                        >
+                          {severity}
+                        </span>
+                      </div>
+
+                      <span className="text-[11px] font-semibold text-slate-600">
+                        {count}{" "}
+                        <span className="font-normal text-slate-400">
+                          ({percentage.toFixed(1)}%)
+                        </span>
+                      </span>
+                    </div>
+
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className={[
+                          "h-full rounded-full transition-all duration-500",
+                          styles.bar,
+                        ].join(" ")}
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            percentage
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              }
+            )}
           </div>
-          <div className="p-2.5 rounded bg-[#090d16] border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase block">sbytes (Src Bytes)</span>
-            <span className="text-white font-bold">{features.sbytes} B</span>
+        </ChartCard>
+
+        <ChartCard
+          title="Detection Logic"
+          subtitle="How SENTINEL classifies network events"
+        >
+          <div className="space-y-3">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-50 text-cyan-700">
+                  <Activity className="h-4 w-4" />
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-slate-800">
+                    01 · Event Ingestion
+                  </p>
+
+                  <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                    Network event attributes are collected and
+                    prepared for inference.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+                  <Target className="h-4 w-4" />
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-slate-800">
+                    02 · Model Inference
+                  </p>
+
+                  <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                    The trained detection model evaluates the
+                    supplied network features.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-700">
+                  <AlertTriangle className="h-4 w-4" />
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-slate-800">
+                    03 · Threat Classification
+                  </p>
+
+                  <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                    Predictions are surfaced as normal activity or
+                    potential attack events for SOC analysis.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-slate-800">
+                    04 · SOC Response
+                  </p>
+
+                  <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                    Results are presented through the dashboard
+                    for investigation and response.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="p-2.5 rounded bg-[#090d16] border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase block">dbytes (Dst Bytes)</span>
-            <span className="text-white font-bold">{features.dbytes} B</span>
-          </div>
-          <div className="p-2.5 rounded bg-[#090d16] border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase block">spkts (Src Packets)</span>
-            <span className="text-white font-bold">{features.spkts} pkts</span>
-          </div>
-          <div className="p-2.5 rounded bg-[#090d16] border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase block">dpkts (Dst Packets)</span>
-            <span className="text-white font-bold">{features.dpkts} pkts</span>
-          </div>
-          <div className="p-2.5 rounded bg-[#090d16] border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase block">service</span>
-            <span className="text-cyan-300 font-bold">{features.service || 'http'}</span>
-          </div>
-          <div className="p-2.5 rounded bg-[#090d16] border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase block">state</span>
-            <span className="text-cyan-300 font-bold">{features.state || 'CON'}</span>
-          </div>
-          <div className="p-2.5 rounded bg-[#090d16] border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase block">rate (Flow Rate)</span>
-            <span className="text-white font-bold">{features.rate} pkt/s</span>
-          </div>
-          <div className="p-2.5 rounded bg-[#090d16] border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase block">sttl (Src TTL)</span>
-            <span className="text-white font-bold">{features.sttl || 64}</span>
-          </div>
-          <div className="p-2.5 rounded bg-[#090d16] border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase block">dttl (Dst TTL)</span>
-            <span className="text-white font-bold">{features.dttl || 64}</span>
-          </div>
-        </div>
+        </ChartCard>
       </div>
 
-      {/* RECOMMENDED RESPONSE (Advisory Only) */}
-      <div className="bg-[#0d1322] border border-slate-800 rounded-lg p-5 space-y-4 font-mono">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-          <h3 className="text-xs uppercase tracking-wider text-amber-300 font-bold flex items-center gap-2">
-            <FileText className="w-4 h-4 text-amber-400" />
-            RECOMMENDED RESPONSE (Analyst Advisory)
-          </h3>
-          <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-            HUMAN-IN-THE-LOOP REQUIRED
-          </span>
-        </div>
+      {/* Recent analyzed events */}
+      <ChartCard
+        title="Recent Analysis Results"
+        subtitle="Latest events available to the analysis console"
+      >
+        {sourceEvents.length === 0 ? (
+          <div className="flex min-h-[260px] items-center justify-center">
+            <div className="text-center">
+              <Crosshair className="mx-auto h-7 w-7 text-slate-300" />
 
-        {/* Highlighted Recommendation Box */}
-        <div className="p-4 rounded-lg bg-[#090d16] border border-amber-500/30 text-xs space-y-3">
-          <div className="text-slate-200 font-semibold leading-relaxed">
-            {selectedThreat.recommendation || 'Investigate source IP and inspect affected destination host logs for unauthorized sessions.'}
-          </div>
+              <p className="mt-3 text-sm font-semibold text-slate-700">
+                No analysis results available
+              </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-400 pt-2 border-t border-slate-800">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span>Investigate source IP {selectedThreat.source_ip} history</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span>Review affected host {selectedThreat.destination_ip} service status</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span>Inspect related protocol traffic on Port {selectedThreat.port || 80}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span>Check firewall logs for repeated connection trials</span>
+              <p className="mt-1 text-xs text-slate-500">
+                Run the Threat Simulator to generate an event.
+              </p>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50">
+                  <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Result
+                  </th>
 
-        {/* Disclaimer on Non-automated Blocking */}
-        <div className="flex items-start gap-2.5 p-3 rounded bg-slate-900/60 border border-slate-800 text-[11px] text-slate-400">
-          <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-          <p className="leading-relaxed">
-            <strong className="text-slate-300">Policy Safeguard Notice:</strong> These recommendations are for security analysts. SENTINEL does NOT automatically drop or block network traffic without explicit security administrator approval.
-          </p>
-        </div>
-      </div>
+                  <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Source
+                  </th>
+
+                  <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Destination
+                  </th>
+
+                  <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Protocol
+                  </th>
+
+                  <th className="px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Severity
+                  </th>
+
+                  <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    Time
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {sourceEvents.slice(0, 12).map(
+                  (event, index) => {
+                    const severity = String(
+                      event.severity ||
+                        event.threat_level ||
+                        (event.prediction === 1 ||
+                        event.prediction === "1"
+                          ? "High"
+                          : "Benign")
+                    );
+
+                    const severityKey =
+                      severity.toLowerCase();
+
+                    const styles =
+                      severityColors[
+                        severityKey.includes("critical")
+                          ? "Critical"
+                          : severityKey.includes("high")
+                          ? "High"
+                          : severityKey.includes("medium")
+                          ? "Medium"
+                          : severityKey.includes("low")
+                          ? "Low"
+                          : "Benign"
+                      ];
+
+                    return (
+                      <tr
+                        key={
+                          event.id ??
+                          event.event_id ??
+                          index
+                        }
+                        className="hover:bg-slate-50"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {getPrediction(event) ===
+                            "Attack" ? (
+                              <ShieldAlert className="h-4 w-4 text-red-500" />
+                            ) : (
+                              <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                            )}
+
+                            <span className="text-xs font-semibold text-slate-700">
+                              {getPrediction(event)}
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3 font-mono text-[11px] text-slate-600">
+                          {getSource(event)}
+                        </td>
+
+                        <td className="px-4 py-3 font-mono text-[11px] text-slate-600">
+                          {getDestination(event)}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold uppercase text-slate-600">
+                            {getProtocol(event)}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <span
+                            className={[
+                              "rounded-md border px-2 py-1 text-[10px] font-semibold",
+                              styles.border,
+                              styles.bg,
+                              styles.text,
+                            ].join(" ")}
+                          >
+                            {severity}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3 text-right">
+                          <span className="inline-flex items-center gap-1.5 text-[10px] text-slate-400">
+                            <Clock3 className="h-3 w-3" />
+                            {event.timestamp ||
+                              event.time ||
+                              "—"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  }
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </ChartCard>
     </div>
   );
 }
