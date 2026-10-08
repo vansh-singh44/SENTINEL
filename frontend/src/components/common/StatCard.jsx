@@ -1,45 +1,4 @@
-// src/components/common/StatCard.jsx
-import React from 'react';
-
-const ACCENTS = {
-  purple: {
-    icon:       'bg-[#6c63ff]/15 text-[#9c94ff] border border-[#6c63ff]/20',
-    glow:       'hover:border-[#6c63ff]/35 hover:shadow-[0_0_0_1px_rgba(108,99,255,0.25)]',
-    valueColor: 'text-white',
-    top:        'from-[#6c63ff]/30 to-transparent',
-  },
-  rose: {
-    icon:       'bg-rose-500/12 text-rose-400 border border-rose-500/20',
-    glow:       'hover:border-rose-500/35 hover:shadow-[0_0_0_1px_rgba(239,68,68,0.2)]',
-    valueColor: 'text-rose-200',
-    top:        'from-rose-500/30 to-transparent',
-  },
-  amber: {
-    icon:       'bg-amber-500/12 text-amber-400 border border-amber-500/20',
-    glow:       'hover:border-amber-500/35 hover:shadow-[0_0_0_1px_rgba(245,158,11,0.2)]',
-    valueColor: 'text-amber-200',
-    top:        'from-amber-500/30 to-transparent',
-  },
-  emerald: {
-    icon:       'bg-emerald-500/12 text-emerald-400 border border-emerald-500/20',
-    glow:       'hover:border-emerald-500/35 hover:shadow-[0_0_0_1px_rgba(34,197,94,0.2)]',
-    valueColor: 'text-emerald-200',
-    top:        'from-emerald-500/30 to-transparent',
-  },
-  cyan: {
-    icon:       'bg-cyan-500/12 text-cyan-400 border border-cyan-500/20',
-    glow:       'hover:border-cyan-500/35 hover:shadow-[0_0_0_1px_rgba(6,182,212,0.2)]',
-    valueColor: 'text-cyan-200',
-    top:        'from-cyan-500/30 to-transparent',
-  },
-};
-
-const TREND_STYLES = {
-  positive: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
-  negative: 'bg-rose-500/10 text-rose-400 border border-rose-500/20',
-  critical: 'bg-rose-500/15 text-rose-300 border border-rose-500/30 animate-pulse',
-  neutral:  'bg-white/[0.05] text-[#8b8fa8] border border-white/[0.07]',
-};
+import React from "react";
 
 export default function StatCard({
   title,
@@ -47,53 +6,109 @@ export default function StatCard({
   subtitle,
   icon: Icon,
   trend,
-  trendType = 'neutral',
-  accentColor = 'purple',
-  onClick
+  trendLabel,
+  accent = "cyan",
 }) {
-  const a = ACCENTS[accentColor] || ACCENTS.purple;
-  const t = TREND_STYLES[trendType] || TREND_STYLES.neutral;
+  const accentStyles = {
+    cyan: {
+      icon: "bg-cyan-50 text-cyan-700 border-cyan-100",
+      value: "text-slate-900",
+    },
+    blue: {
+      icon: "bg-blue-50 text-blue-700 border-blue-100",
+      value: "text-slate-900",
+    },
+    green: {
+      icon: "bg-emerald-50 text-emerald-700 border-emerald-100",
+      value: "text-slate-900",
+    },
+    amber: {
+      icon: "bg-amber-50 text-amber-700 border-amber-100",
+      value: "text-slate-900",
+    },
+    red: {
+      icon: "bg-red-50 text-red-700 border-red-100",
+      value: "text-slate-900",
+    },
+  };
+
+  const styles =
+    accentStyles[accent] || accentStyles.cyan;
+
+  const hasTrend =
+    trend !== undefined &&
+    trend !== null &&
+    trend !== "";
+
+  const numericTrend =
+    typeof trend === "number"
+      ? trend
+      : Number.parseFloat(String(trend));
+
+  const trendPositive =
+    Number.isFinite(numericTrend) && numericTrend >= 0;
 
   return (
-    <div
-      onClick={onClick}
-      className={`relative overflow-hidden rounded-2xl p-5
-                  bg-[#13152e] border border-white/[0.07]
-                  transition-all duration-200
-                  ${a.glow}
-                  ${onClick ? 'cursor-pointer' : ''}`}
-    >
-      {/* Top gradient streak */}
-      <div className={`absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r ${a.top}`} />
-
-      {/* Subtle radial glow in corner */}
-      <div className="absolute -top-4 -right-4 w-24 h-24 rounded-full
-                      bg-gradient-radial opacity-30 pointer-events-none"
-           style={{ background: 'radial-gradient(circle, rgba(108,99,255,0.12) 0%, transparent 70%)' }} />
-
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1 min-w-0">
-          <p className="text-[11px] font-semibold text-[#5a5e7a] uppercase tracking-widest truncate">
+    <div className="group rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 hover:border-slate-300 hover:shadow-md sm:p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="truncate text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             {title}
           </p>
-          <div className={`text-2xl sm:text-3xl font-bold tracking-tight ${a.valueColor}`}>
-            {value}
+
+          <div className="mt-2 flex items-baseline gap-2">
+            <p
+              className={[
+                "text-2xl font-bold tracking-tight sm:text-3xl",
+                styles.value,
+              ].join(" ")}
+            >
+              {value ?? "—"}
+            </p>
           </div>
+
+          {subtitle && (
+            <p className="mt-1.5 truncate text-[11px] text-slate-500">
+              {subtitle}
+            </p>
+          )}
+
+          {hasTrend && (
+            <div className="mt-3 flex items-center gap-1.5">
+              <span
+                className={[
+                  "text-[10px] font-semibold",
+                  trendPositive
+                    ? "text-emerald-600"
+                    : "text-red-600",
+                ].join(" ")}
+              >
+                {typeof trend === "number"
+                  ? `${trend > 0 ? "+" : ""}${trend}%`
+                  : trend}
+              </span>
+
+              {trendLabel && (
+                <span className="text-[10px] text-slate-400">
+                  {trendLabel}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {Icon && (
-          <div className={`shrink-0 p-2.5 rounded-xl ${a.icon}`}>
-            <Icon className="w-5 h-5" />
+          <div
+            className={[
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-transform duration-200 group-hover:scale-105",
+              styles.icon,
+            ].join(" ")}
+          >
+            <Icon
+              className="h-[18px] w-[18px]"
+              strokeWidth={1.9}
+            />
           </div>
-        )}
-      </div>
-
-      <div className="mt-4 flex items-center justify-between gap-2">
-        <p className="text-[11px] text-[#5a5e7a] truncate">{subtitle}</p>
-        {trend && (
-          <span className={`shrink-0 px-2 py-0.5 rounded-lg text-[10px] font-semibold ${t}`}>
-            {trend}
-          </span>
         )}
       </div>
     </div>
