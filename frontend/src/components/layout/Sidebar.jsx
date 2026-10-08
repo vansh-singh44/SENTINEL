@@ -1,5 +1,4 @@
-// src/components/layout/Sidebar.jsx
-import React from 'react';
+import React from "react";
 import {
   Shield,
   LayoutDashboard,
@@ -10,153 +9,201 @@ import {
   Bell,
   Terminal,
   Settings,
-  LogOut,
-  Server
-} from 'lucide-react';
-import { useSoc } from '../../context/SocContext';
+  Server,
+} from "lucide-react";
+import { useSoc } from "../../context/SocContext";
 
 const NAV_ITEMS = [
-  { id: 'overview',          icon: LayoutDashboard, label: 'Overview' },
-  { id: 'live-feed',         icon: Radio,           label: 'Live Threat Feed', pulse: true },
-  { id: 'threat-analysis',   icon: Crosshair,       label: 'Threat Analysis' },
-  { id: 'ai-model',          icon: Cpu,             label: 'AI Model' },
-  { id: 'analytics',         icon: BarChart3,       label: 'Analytics' },
-  { id: 'alerts',            icon: Bell,            label: 'Alerts', badge: true },
-  { id: 'threat-simulator',  icon: Terminal,        label: 'Threat Simulator' },
+  {
+    id: "overview",
+    icon: LayoutDashboard,
+    label: "Overview",
+  },
+  {
+    id: "live-feed",
+    icon: Radio,
+    label: "Live Threat Feed",
+    pulse: true,
+  },
+  {
+    id: "threat-analysis",
+    icon: Crosshair,
+    label: "Threat Analysis",
+  },
+  {
+    id: "ai-model",
+    icon: Cpu,
+    label: "AI Model",
+  },
+  {
+    id: "analytics",
+    icon: BarChart3,
+    label: "Analytics",
+  },
+  {
+    id: "alerts",
+    icon: Bell,
+    label: "Alerts",
+    badge: true,
+  },
+  {
+    id: "threat-simulator",
+    icon: Terminal,
+    label: "Threat Simulator",
+  },
 ];
 
-export default function Sidebar({ isOpen, onClose }) {
-  const { activePage, setActivePage, alerts, apiHealth, setSettingsOpen } = useSoc();
+export default function Sidebar({ isOpen = false, onClose }) {
+  const {
+    activePage,
+    setActivePage,
+    alerts = [],
+    apiHealth = {},
+    setSettingsOpen,
+  } = useSoc();
 
-  const unread = alerts.filter(a => a.status === 'Active' && a.severity === 'CRITICAL').length;
+  const unreadAlerts = alerts.filter(
+    (alert) => alert.status === "Active"
+  );
 
-  const handleNav = (id) => {
-    setActivePage(id);
-    if (onClose) onClose();
+  const handleNavigation = (page) => {
+    setActivePage(page);
+
+    if (onClose) {
+      onClose();
+    }
   };
 
   return (
     <>
-      {/* Mobile backdrop */}
       {isOpen && (
-        <div
+        <button
+          type="button"
+          aria-label="Close navigation"
           onClick={onClose}
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-sm lg:hidden"
         />
       )}
 
-      {/* Sidebar rail */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 flex flex-col
-          bg-[#0b0d24] border-r border-white/[0.06]
-          transition-transform duration-300 ease-in-out
-          lg:translate-x-0 lg:w-[72px]
-          w-[72px]
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={[
+          "fixed left-0 top-0 z-50 flex h-screen w-[72px] flex-col",
+          "border-r border-slate-200 bg-white",
+          "transition-transform duration-200",
+          isOpen
+            ? "translate-x-0"
+            : "-translate-x-full lg:translate-x-0",
+        ].join(" ")}
       >
-        {/* Logo / Brand */}
-        <div className="h-16 flex items-center justify-center border-b border-white/[0.06] shrink-0">
-          <div className="w-10 h-10 rounded-xl bg-[#6c63ff]/15 border border-[#6c63ff]/30
-                          flex items-center justify-center shadow-lg shadow-[#6c63ff]/10
-                          relative group">
-            <Shield className="w-5 h-5 text-[#9c94ff]" />
-            {/* Tooltip */}
-            <span className="sidebar-tooltip font-mono font-bold tracking-widest text-[11px]">
-              SENTINEL SOC
+        <div className="flex h-16 shrink-0 items-center justify-center border-b border-slate-200">
+          <button
+            type="button"
+            onClick={() => handleNavigation("overview")}
+            aria-label="SENTINEL dashboard"
+            className="group relative flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-200 bg-cyan-50 text-cyan-700 transition-colors hover:border-cyan-300 hover:bg-cyan-100"
+          >
+            <Shield
+              className="h-5 w-5"
+              strokeWidth={2}
+            />
+
+            <span className="pointer-events-none absolute left-[58px] top-1/2 hidden -translate-y-1/2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-lg group-hover:block">
+              SENTINEL
             </span>
-          </div>
+          </button>
         </div>
 
-        {/* Nav items */}
-        <nav className="flex-1 flex flex-col items-center gap-1 py-4 overflow-y-auto overflow-x-visible">
-          {NAV_ITEMS.map(({ id, icon: Icon, label, pulse, badge }) => {
-            const isActive = activePage === id;
-            const showBadge = badge && unread > 0;
+        <nav className="flex flex-1 flex-col items-center gap-1 overflow-y-auto overflow-x-visible py-4">
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const active = activePage === item.id;
 
             return (
               <button
-                key={id}
-                onClick={() => handleNav(id)}
-                title={label}
-                className={`sidebar-nav-item relative w-12 h-12 rounded-xl flex items-center justify-center
-                  transition-all duration-200 group
-                  ${isActive
-                    ? 'bg-[#6c63ff]/20 text-[#9c94ff] shadow-md shadow-[#6c63ff]/10'
-                    : 'text-[#5a5e7a] hover:text-[#9c94ff] hover:bg-[#6c63ff]/10'
-                  }`}
-                aria-label={label}
+                key={item.id}
+                type="button"
+                onClick={() => handleNavigation(item.id)}
+                aria-label={item.label}
+                title={item.label}
+                className={[
+                  "group relative flex h-11 w-11 items-center justify-center rounded-lg",
+                  "transition-colors duration-150",
+                  active
+                    ? "bg-cyan-50 text-cyan-700"
+                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-900",
+                ].join(" ")}
               >
-                {/* Active pill indicator */}
-                {isActive && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6
-                                   bg-[#6c63ff] rounded-r-full" />
+                {active && (
+                  <span className="absolute -left-3 top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-r-full bg-cyan-600" />
                 )}
 
-                <Icon className="w-[18px] h-[18px]" />
+                <Icon
+                  className="h-[18px] w-[18px]"
+                  strokeWidth={active ? 2.2 : 1.8}
+                />
 
-                {/* Pulse dot for live feed */}
-                {pulse && (
-                  <span className="absolute top-2 right-2 h-1.5 w-1.5">
-                    <span className="absolute inline-flex h-full w-full rounded-full bg-[#6c63ff] opacity-60 animate-ping" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#9c94ff]" />
-                  </span>
+                {item.pulse && (
+                  <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 )}
 
-                {/* Alert badge */}
-                {showBadge && (
-                  <span className="absolute top-1.5 right-1.5 h-4 w-4 flex items-center justify-center
-                                   rounded-full bg-rose-600 text-[9px] font-bold text-white font-mono">
-                    {unread}
-                  </span>
-                )}
+                {item.badge &&
+                  unreadAlerts.length > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+                      {unreadAlerts.length > 9
+                        ? "9+"
+                        : unreadAlerts.length}
+                    </span>
+                  )}
 
-                {/* Hover tooltip */}
-                <span className="sidebar-tooltip">{label}</span>
+                <span className="pointer-events-none absolute left-[58px] top-1/2 z-50 hidden -translate-y-1/2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-lg group-hover:block">
+                  {item.label}
+                </span>
               </button>
             );
           })}
         </nav>
 
-        {/* Bottom section: status dot + settings */}
-        <div className="flex flex-col items-center gap-1 pb-4 border-t border-white/[0.06] pt-4 shrink-0">
-          {/* API health dot */}
-          <div
-            title={apiHealth.online ? 'Backend: Connected' : 'Backend: Offline (Demo Mode)'}
-            className="sidebar-nav-item relative w-12 h-12 rounded-xl flex items-center justify-center
-                       text-[#5a5e7a] hover:text-[#9c94ff] hover:bg-[#6c63ff]/10 transition-all group"
-          >
-            <Server className="w-[18px] h-[18px]" />
-            <span className={`absolute top-2.5 right-2.5 h-2 w-2 rounded-full border-2 border-[#0b0d24]
-              ${apiHealth.online ? 'bg-emerald-400' : 'bg-rose-500'}`}
+        <div className="flex shrink-0 flex-col items-center gap-1 border-t border-slate-200 py-4">
+          <div className="group relative flex h-11 w-11 items-center justify-center rounded-lg text-slate-500">
+            <Server className="h-[18px] w-[18px]" />
+
+            <span
+              className={[
+                "absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-white",
+                apiHealth.online
+                  ? "bg-emerald-500"
+                  : "bg-amber-500",
+              ].join(" ")}
             />
-            <span className="sidebar-tooltip">
-              {apiHealth.online ? 'API: Connected' : 'API: Demo Mode'}
+
+            <span className="pointer-events-none absolute left-[58px] top-1/2 z-50 hidden -translate-y-1/2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-lg group-hover:block">
+              {apiHealth.online
+                ? "API Connected"
+                : "Demo Mode"}
             </span>
           </div>
 
-          {/* Settings */}
           <button
+            type="button"
             onClick={() => setSettingsOpen(true)}
-            title="Settings"
-            className="sidebar-nav-item relative w-12 h-12 rounded-xl flex items-center justify-center
-                       text-[#5a5e7a] hover:text-[#9c94ff] hover:bg-[#6c63ff]/10 transition-all group"
             aria-label="Settings"
+            title="Settings"
+            className="group relative flex h-11 w-11 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900"
           >
-            <Settings className="w-[18px] h-[18px]" />
-            <span className="sidebar-tooltip">Settings</span>
+            <Settings className="h-[18px] w-[18px]" />
+
+            <span className="pointer-events-none absolute left-[58px] top-1/2 z-50 hidden -translate-y-1/2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-lg group-hover:block">
+              Settings
+            </span>
           </button>
 
-          {/* Spacer avatar */}
           <div
             title="Security Analyst"
-            className="sidebar-nav-item relative w-12 h-12 rounded-xl flex items-center justify-center
-                       hover:bg-[#6c63ff]/10 transition-all cursor-pointer group"
+            className="flex h-11 w-11 items-center justify-center"
           >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#6c63ff] to-[#a78bfa]
-                            flex items-center justify-center text-white font-bold text-xs select-none">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-[10px] font-bold tracking-wide text-white">
               SA
             </div>
-            <span className="sidebar-tooltip">Security Analyst</span>
           </div>
         </div>
       </aside>
